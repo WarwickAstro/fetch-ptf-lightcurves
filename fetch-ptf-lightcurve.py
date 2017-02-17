@@ -46,6 +46,9 @@ def get_filter(raw_data):
     # or negative ('null' zero point -> 0 in the PTF database)
     filt = raw_data[:, 1] > 0
 
+    # We also want to discard anything that is more than twice the average field FWHM
+    filt = np.logical_and(filt, fwhm_ratio < 2)
+
     n = 0
     mean = None
     while True:
