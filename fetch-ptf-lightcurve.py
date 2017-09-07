@@ -25,7 +25,8 @@ import urllib.request
 
 PTF_QUERY_URL = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query?catalog=ptf_lightcurves"\
     "&spatial=cone&radius=2&radunits=arcsec&constraints=(fid%3E1)AND(goodflag%3E0)"\
-    "&selcols=hmjd,mag_autocorr,mag_auto,magerr_auto,fwhm_image,fwhmsex,ra,dec&outfmt=1&objstr={},{}"
+    "&selcols=hmjd,mag_autocorr,mag_auto,magerr_auto,fwhm_image,fwhmsex,xpeak_image,ypeak_image,"\
+    "ra,dec&outfmt=1&objstr={},{}"
 
 def print_usage(name):
     """Prints the utility help"""
@@ -47,6 +48,12 @@ def get_filter(raw_data):
     # We also want to discard anything that is more than twice the average field FWHM
     fwhm_ratio = raw_data['fwhm_image'] / raw_data['fwhmsex']
     filt = np.logical_and(filt, fwhm_ratio < 1.5)
+
+    # Points within 5px of the edge of the frame are also bad
+    filt = np.logical_and(filt, raw_data['xpeak_image'] > 5)
+    filt = np.logical_and(filt, raw_data['xpeak_image'] < 2043)
+    filt = np.logical_and(filt, raw_data['ypeak_image'] > 5)
+    filt = np.logical_and(filt, raw_data['ypeak_image'] < 4091)
 
     # Finally any points that had more than 0.5 mag photometry correction
     filt = np.logical_and(filt, abs(raw_data['mag_autocorr'] - raw_data['mag_auto']) < 0.5)
@@ -98,9 +105,10 @@ if __name__ == '__main__':
 
         # Write just the file header if there are no data
         if len(lines) > 0:
-            data = np.array(np.genfromtxt(lines, usecols=(0, 1, 2, 3, 4, 5), dtype=[
+            data = np.array(np.genfromtxt(lines, usecols=(0, 1, 2, 3, 4, 5, 6, 7), dtype=[
                 ('hmjd', 'f8'), ('mag_autocorr', 'f8'), ('mag_auto', 'f8'), ('magerr_auto', 'f8'),
-                ('fwhm_image', 'f8'), ('fwhmsex', 'f8')]))
+                ('fwhm_image', 'f8'), ('fwhmsex', 'f8'),
+                ('xpeak_image', 'f8'), ('ypeak_image', 'f8')]))
 
             good_points = get_filter(data)
             if np.sum(good_points) > 0:
