@@ -40,17 +40,16 @@ def print_usage(name):
     return 1
 
 def get_filter(raw_data):
-    fwhm_ratio = raw_data[:, 4] / raw_data[:, 5]
-
     # Start by excluding any points that are nan ('null' magnitude in the PTF database)
     # or negative ('null' zero point -> 0 in the PTF database)
-    filt = raw_data[:, 1] > 0
+    filt = raw_data['mag_autocorr'] > 0
 
     # We also want to discard anything that is more than twice the average field FWHM
+    fwhm_ratio = raw_data['fwhm_image'] / raw_data['fwhmsex']
     filt = np.logical_and(filt, fwhm_ratio < 1.5)
 
     # Finally any points that had more than 0.5 mag photometry correction
-    filt = np.logical_and(filt, abs(raw_data[:, 1] - raw_data[:, 2]) < 0.5)
+    filt = np.logical_and(filt, abs(raw_data['mag_autocorr'] - raw_data['mag_auto']) < 0.5)
 
     n = 0
     mean = None
@@ -99,16 +98,21 @@ if __name__ == '__main__':
 
         # Write just the file header if there are no data
         if len(lines) > 0:
-            data = np.array(np.genfromtxt(lines, usecols=(0, 1, 2, 3, 4, 5)), ndmin=2)
-            good_points = get_filter(data)
+            data = np.array(np.genfromtxt(lines, usecols=(0, 1, 2, 3, 4, 5), dtype=[
+                ('hmjd', 'f8'), ('mag_autocorr', 'f8'), ('mag_auto', 'f8'), ('magerr_auto', 'f8'),
+                ('fwhm_image', 'f8'), ('fwhmsex', 'f8')]))
 
+            good_points = get_filter(data)
             if np.sum(good_points) > 0:
-                hmjd = data[good_points, 0]
+                hmjd = data['hmjd'][good_points]
                 reference_hmjd = np.min(hmjd)
-                outdata = np.transpose((hmjd - reference_hmjd, data[good_points, 1], data[good_points, 3]))
+                outdata = np.transpose((hmjd - reference_hmjd,
+                                        data['mag_autocorr'][good_points],
+                                        data['magerr_auto'][good_points]))
+
                 outdata = outdata[outdata[:, 0].argsort()]
                 excluded_points = len(data) - np.sum(good_points)
-                median_absolute_correction = np.median(abs(data[:,1] - data[:,2]))
+                median_absolute_correction = np.median(abs(data['mag_autocorr'] - data['mag_auto']))
 
         header = 'get-gator-lightcurve.py output file\n'
         header += 'RA: {}\n'.format(target_ra)
