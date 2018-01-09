@@ -16,64 +16,66 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 # pylint: disable=invalid-name
+# pylint: disable=missing-docstring
 
+import argparse as ap
 import concurrent.futures
-import numpy as np
 import os
 import subprocess
 import sys
 import time
-
-CONCURRENT_DOWNLOAD_COUNT = 3
-
-def print_usage(name):
-    """Prints the utility help"""
-    print('Usage: {} command'.format(name))
-    print()
-    print('    {} input outputdir'.format(name))
-    print()
-    print('  Download lightcurves from PTF')
-    print()
-    print('  input is the path to a csv file with rows of name, ra, dec.')
-    print('  output is the directory where downloaded files are saved.')
-    return 1
+import numpy as np
 
 if __name__ == '__main__':
-    if len(sys.argv) > 2:
-        targets = np.genfromtxt(sys.argv[1], delimiter=',', dtype='str', skip_header=1)
-        output = sys.argv[2]
+    parser = ap.ArgumentParser(
+        description="Fetch multiple PTF lightcurves from an input CSV file.")
+    parser.add_argument('input',
+                        type=str,
+                        help='Path to csv file. Columns should be name, ra, dec.')
+    parser.add_argument('filter',
+                        type=str,
+                        choices=set(('R', 'g')),
+                        default='R',
+                        help='Filter to query.')
+    parser.add_argument('outdir',
+                        type=str,
+                        help='Path to a directory to save generated lightcurves.')
+    parser.add_argument('--concurrent-queries',
+                        type=int,
+                        default=3,
+                        help='Maximum number of queries to run in parallel.')
+    args = parser.parse_args()
 
-        def run_query(ra, dec, outpath):
-            try:
-                path = os.path.join(os.path.dirname(sys.argv[0]), 'fetch-ptf-lightcurve.py')
-                subprocess.check_output([path, ra, dec, outpath], universal_newlines=True)
-            except subprocess.CalledProcessError:
-                print('Failed to query ' + outpath)
-                pass
+    targets = np.genfromtxt(args.input, delimiter=',', dtype='str', skip_header=1)
 
-        skipped_jobs = 0
-        print('Querying lightcurves...')
-        with concurrent.futures.ThreadPoolExecutor(max_workers=CONCURRENT_DOWNLOAD_COUNT) as ex:
-            jobs = []
-            for t in targets:
-                datafile = output + '/' + t[0]+'_ptf.dat'
-                if not os.path.isfile(datafile):
-                    jobs.append(ex.submit(run_query, t[1], t[2], datafile))
-                else:
-                    skipped_jobs += 1
+    def run_query(ra, dec, outpath):
+        try:
+            path = os.path.join(os.path.dirname(sys.argv[0]), 'fetch-ptf-lightcurve.py')
+            subprocess.check_output([path, ra, dec, args.filter, outpath], universal_newlines=True)
+        except subprocess.CalledProcessError:
+            print('Failed to query ' + outpath)
 
-            total_jobs = len(jobs)
-            while True:
-                completed = sum(j.done() for j in jobs)
-                if completed == total_jobs:
-                    break
+    skipped_jobs = 0
+    print('Querying lightcurves...')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrent_queries) as ex:
+        jobs = []
+        for t in targets:
+            datafile = os.path.join(args.outdir, t[0]+'_ptf.dat')
+            if not os.path.isfile(datafile):
+                jobs.append(ex.submit(run_query, t[1], t[2], datafile))
+            else:
+                skipped_jobs += 1
 
-                all_complete = skipped_jobs + completed
-                all_total = skipped_jobs + total_jobs
-                all_percent = int(round(all_complete * 100. / all_total, 0))
-                sys.stdout.write('Downloading {}/{} ({}%)\r'.format(all_complete, all_total,
-                                                                    all_percent))
-                time.sleep(5.)
-            ex.shutdown()
-    else:
-        sys.exit(print_usage(os.path.basename(sys.argv[0])))
+        total_jobs = len(jobs)
+        while True:
+            completed = sum(j.done() for j in jobs)
+            if completed == total_jobs:
+                break
+
+            all_complete = skipped_jobs + completed
+            all_total = skipped_jobs + total_jobs
+            all_percent = int(round(all_complete * 100. / all_total, 0))
+            sys.stdout.write('Downloading {}/{} ({}%)\r'.format(all_complete, all_total,
+                                                                all_percent))
+            time.sleep(5.)
+        ex.shutdown()

@@ -16,31 +16,30 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 # pylint: disable=invalid-name
+# pylint: disable=missing-docstring
 
+import argparse as ap
 import os
 import subprocess
 import sys
 
-def print_usage(name):
-    """Prints the utility help"""
-    print('Usage: {} command'.format(name))
-    print()
-    print('    {} input output'.format(name))
-    print()
-    print('  Re-fetch a PTF lightcurve')
-    print()
-    return 1
-
 if __name__ == '__main__':
-    if len(sys.argv) > 2:
+    parser = ap.ArgumentParser(description="Regenerate a queried PTF lightcurve.")
+    parser.add_argument('input',
+                        type=str,
+                        help='Path to the previously generated lightcurve.')
+    parser.add_argument('output',
+                        type=str,
+                        help='Path to save new lightcurve.')
+    args = parser.parse_args()
 
-        with open(sys.argv[1]) as data:
-            header = [next(data) for x in range(3)]
-        ra = header[1].split(' ')[2][:-1]
-        dec = header[2].split(' ')[2][:-1]
-        outpath = sys.argv[2]
+    with open(args.input) as data:
+        header = [next(data) for x in range(4)]
 
-        path = os.path.join(os.path.dirname(sys.argv[0]), 'fetch-ptf-lightcurve.py')
-        subprocess.check_output([path, ra, dec, outpath], universal_newlines=True)
-    else:
-        sys.exit(print_usage(os.path.basename(sys.argv[0])))
+    ra = header[1].split(' ')[2][:-1]
+    dec = header[2].split(' ')[2][:-1]
+    filt = header[3].split(' ')[2][:-1]
+    outpath = sys.argv[2]
+
+    path = os.path.join(os.path.dirname(sys.argv[0]), 'fetch-ptf-lightcurve.py')
+    subprocess.check_output([path, ra, dec, filt, outpath], universal_newlines=True)
